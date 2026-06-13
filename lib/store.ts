@@ -158,6 +158,15 @@ export const useScheduleStore = create<ScheduleStore>()(
           }
         }
 
+        if (configWarnings.length > 0) {
+          set((state) => ({
+            schedules: state.schedules.filter((s) => !(s.year === year && s.month === month)),
+            violations: [],
+            configWarnings,
+          }))
+          return
+        }
+
         const existing = schedules.find((s) => s.year === year && s.month === month)
         const { schedule, violations } = generateMonthSchedule(config, year, month, existing)
         set((state) => ({
@@ -166,7 +175,7 @@ export const useScheduleStore = create<ScheduleStore>()(
             schedule,
           ],
           violations,
-          configWarnings,
+          configWarnings: [],
         }))
       },
 

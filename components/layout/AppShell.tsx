@@ -12,12 +12,12 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
-      <Sidebar />
+      <div className="print:hidden"><Sidebar /></div>
       <div className="flex flex-col flex-1 min-w-0">
         <TopBar />
         <main className="flex-1 overflow-auto">{children}</main>
       </div>
-      <ConfigPanel isOpen={configPanelOpen} onClose={() => setConfigPanelOpen(false)} />
+      <div className="print:hidden"><ConfigPanel isOpen={configPanelOpen} onClose={() => setConfigPanelOpen(false)} /></div>
     </div>
   )
 }

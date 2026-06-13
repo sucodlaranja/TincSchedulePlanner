@@ -22,7 +22,7 @@ export interface GenerateResult {
 }
 
 function isShiftActiveOnDay(shift: Shift, date: Date): boolean {
-  return shift.activeDays.length === 0 || shift.activeDays.includes(date.getDay() as 0 | 1 | 2 | 3 | 4 | 5 | 6)
+  return (shift.activeDays ?? []).length === 0 || (shift.activeDays ?? []).includes(date.getDay() as 0 | 1 | 2 | 3 | 4 | 5 | 6)
 }
 
 // Normalize legacy worker preferences (preferWeekendsOff boolean → preferredDaysOff array)
