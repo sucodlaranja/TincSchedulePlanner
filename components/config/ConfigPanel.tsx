@@ -102,10 +102,10 @@ export default function ConfigPanel({ isOpen, onClose }: { isOpen: boolean; onCl
             ) : (
               <div className="space-y-3">
                 <p className="text-xs text-gray-500">
-                  Groups A and B swap shifts each week. On odd ISO weeks:
+                  Workers are auto-split by their order in the list. The first half and second half swap shifts every week. On odd ISO weeks:
                 </p>
                 <Select
-                  label="Group A shift (odd weeks)"
+                  label="First half of workers (odd weeks)"
                   value={config.groupAShiftWeek1}
                   onChange={(e) => updateConfigMeta({ groupAShiftWeek1: e.target.value })}
                 >
@@ -115,7 +115,7 @@ export default function ConfigPanel({ isOpen, onClose }: { isOpen: boolean; onCl
                   ))}
                 </Select>
                 <Select
-                  label="Group B shift (odd weeks)"
+                  label="Second half of workers (odd weeks)"
                   value={config.groupBShiftWeek1}
                   onChange={(e) => updateConfigMeta({ groupBShiftWeek1: e.target.value })}
                 >

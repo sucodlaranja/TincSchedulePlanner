@@ -6,7 +6,7 @@ import Button from '@/components/ui/Button'
 import Input from '@/components/ui/Input'
 import Select from '@/components/ui/Select'
 import Toggle from '@/components/ui/Toggle'
-import type { Worker, ShiftGroup, DayOfWeek } from '@/lib/types'
+import type { Worker, DayOfWeek } from '@/lib/types'
 
 const WORKER_COLORS = [
   '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4',
@@ -51,7 +51,6 @@ export default function WorkerForm({ worker, onClose }: WorkerFormProps) {
   const [form, setForm] = useState({
     name: worker?.name ?? '',
     hoursPerWeek: worker?.hoursPerWeek ?? 40,
-    shiftGroup: (worker?.shiftGroup ?? 'A') as ShiftGroup,
     color: worker?.color ?? defaultColor,
     preferredDaysOff: initialDaysOff,
     preferredShiftId: worker?.preferences.preferredShiftId ?? null as string | null,
@@ -79,7 +78,6 @@ export default function WorkerForm({ worker, onClose }: WorkerFormProps) {
       id: worker?.id ?? generateId(),
       name: form.name.trim(),
       hoursPerWeek: form.hoursPerWeek,
-      shiftGroup: form.shiftGroup,
       color: form.color,
       active: form.active,
       preferences: {
@@ -107,25 +105,14 @@ export default function WorkerForm({ worker, onClose }: WorkerFormProps) {
         autoFocus
       />
 
-      <div className="grid grid-cols-2 gap-3">
-        <Input
-          label="Hours per week"
-          type="number"
-          min={1}
-          max={60}
-          value={form.hoursPerWeek}
-          onChange={(e) => setForm((f) => ({ ...f, hoursPerWeek: parseInt(e.target.value) || 40 }))}
-        />
-        <Select
-          label="Shift group"
-          value={form.shiftGroup}
-          onChange={(e) => setForm((f) => ({ ...f, shiftGroup: e.target.value as ShiftGroup }))}
-          helper="A and B rotate weekly"
-        >
-          <option value="A">Group A</option>
-          <option value="B">Group B</option>
-        </Select>
-      </div>
+      <Input
+        label="Hours per week"
+        type="number"
+        min={1}
+        max={60}
+        value={form.hoursPerWeek}
+        onChange={(e) => setForm((f) => ({ ...f, hoursPerWeek: parseInt(e.target.value) || 40 }))}
+      />
 
       {config && config.shifts.length > 0 && (
         <Select

@@ -54,7 +54,6 @@ export default function WorkerListView() {
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th className="text-left px-4 py-3 font-medium text-gray-500">Name</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-500 hidden sm:table-cell">Group</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-500 hidden md:table-cell">Hrs/week</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-500 hidden lg:table-cell">Preference</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-500 hidden sm:table-cell">Status</th>
@@ -74,11 +73,6 @@ export default function WorkerListView() {
                       </div>
                       <span className="font-medium text-gray-800">{worker.name}</span>
                     </div>
-                  </td>
-                  <td className="px-4 py-3 hidden sm:table-cell">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${worker.shiftGroup === 'A' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
-                      Group {worker.shiftGroup}
-                    </span>
                   </td>
                   <td className="px-4 py-3 hidden md:table-cell text-gray-600">{worker.hoursPerWeek}h</td>
                   <td className="px-4 py-3 hidden lg:table-cell text-gray-500 text-xs">

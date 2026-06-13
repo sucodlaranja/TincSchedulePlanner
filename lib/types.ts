@@ -1,6 +1,5 @@
 export type WorkerId = string
 export type ShiftId = string
-export type ShiftGroup = 'A' | 'B'
 
 // 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat (JS Date.getDay() convention)
 export type DayOfWeek = 0 | 1 | 2 | 3 | 4 | 5 | 6
@@ -14,7 +13,6 @@ export interface Worker {
   id: WorkerId
   name: string
   hoursPerWeek: number
-  shiftGroup: ShiftGroup
   preferences: WorkerPreferences
   color: string
   active: boolean
@@ -30,12 +28,17 @@ export interface Shift {
   activeDays: DayOfWeek[]  // days this shift runs; empty = all days
 }
 
+export interface DayGroupConstraint {
+  id: string
+  label: string
+  days: DayOfWeek[]   // days this group applies to (subset of shift's activeDays)
+  min: number
+  max: number | null  // null = no limit
+}
+
 export interface ShiftConstraints {
   shiftId: ShiftId
-  weekdayMin: number
-  weekdayMax: number
-  weekendMin: number
-  weekendMax: number
+  dayGroups: DayGroupConstraint[]
 }
 
 export interface ScheduleConfig {
@@ -44,8 +47,8 @@ export interface ScheduleConfig {
   shifts: Shift[]
   constraints: ShiftConstraints[]
   workers: Worker[]
-  groupAShiftWeek1: ShiftId
-  groupBShiftWeek1: ShiftId
+  groupAShiftWeek1: ShiftId   // rotation slot 0 shift in odd ISO weeks
+  groupBShiftWeek1: ShiftId   // rotation slot 1 shift in odd ISO weeks
   workingDaysPerWeek: number
   daysOffPerWeek: number
 }

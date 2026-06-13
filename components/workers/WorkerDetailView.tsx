@@ -62,7 +62,7 @@ export default function WorkerDetailView({ workerId }: WorkerDetailViewProps) {
         <div>
           <h1 className="text-xl font-bold text-gray-900">{worker.name}</h1>
           <p className="text-sm text-gray-500">
-            Group {worker.shiftGroup} · {worker.hoursPerWeek}h/week
+            {worker.hoursPerWeek}h/week
             {(worker.preferences.preferredDaysOff ?? []).length > 0 ? ` · Prefers off: ${(worker.preferences.preferredDaysOff ?? []).map((d) => ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d]).join(', ')}` : ''}
           </p>
         </div>

@@ -1,10 +1,11 @@
 "use client";
 
 import { useScheduleStore } from "@/lib/store";
+import { normalizeDayGroups } from "@/lib/scheduler";
 import ShiftBadge from "./ShiftBadge";
 import ConflictIndicator from "./ConflictIndicator";
 import { isInMonth, isToday } from "@/lib/calendar-utils";
-import type { ScheduleEntry, ConstraintViolation } from "@/lib/types";
+import type { ScheduleEntry, ConstraintViolation, DayOfWeek, ShiftConstraints } from "@/lib/types";
 
 interface CalendarCellProps {
   date: Date;
@@ -94,15 +95,15 @@ export default function CalendarCell({
               const constraint = config.constraints.find(
                 (c) => c.shiftId === shift.id,
               );
+              const groups = normalizeDayGroups(constraint as (ShiftConstraints & Record<string, unknown>) | undefined, shift)
+              const group = groups.find((g) => g.days.includes(date.getDay() as DayOfWeek))
               return (
                 <ShiftBadge
                   key={shift.id}
                   shift={shift}
                   count={count}
-                  min={
-                    isWeekend ? constraint?.weekendMin : constraint?.weekdayMin
-                  }
-                  max={isWeekend ? constraint?.weekendMax : undefined}
+                  min={group?.min}
+                  max={group?.max ?? undefined}
                 />
               );
             })}

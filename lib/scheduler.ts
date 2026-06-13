@@ -2,8 +2,6 @@ import {
   getDaysInMonth,
   groupByISOWeek,
   toDateString,
-  isWeekendDay,
-  isWeekdayDay,
   getISOWeekNumber,
 } from './calendar-utils'
 import type {
@@ -14,6 +12,9 @@ import type {
   WorkerId,
   ShiftId,
   Shift,
+  ShiftConstraints,
+  DayGroupConstraint,
+  DayOfWeek,
 } from './types'
 
 export interface GenerateResult {
@@ -22,13 +23,48 @@ export interface GenerateResult {
 }
 
 function isShiftActiveOnDay(shift: Shift, date: Date): boolean {
-  return (shift.activeDays ?? []).length === 0 || (shift.activeDays ?? []).includes(date.getDay() as 0 | 1 | 2 | 3 | 4 | 5 | 6)
+  return (shift.activeDays ?? []).length === 0 || (shift.activeDays ?? []).includes(date.getDay() as DayOfWeek)
+}
+
+// Returns the days a shift is active on (all 7 if activeDays is empty)
+export function getActiveDaysForShift(shift: Shift): DayOfWeek[] {
+  const all: DayOfWeek[] = [0, 1, 2, 3, 4, 5, 6]
+  return (shift.activeDays ?? []).length === 0 ? all : shift.activeDays
+}
+
+// Normalizes legacy weekdayMin/Max/weekendMin/Max constraints into DayGroupConstraint[]
+// Also handles the case where dayGroups already exists (new format)
+export function normalizeDayGroups(
+  constraint: (ShiftConstraints & Record<string, unknown>) | undefined,
+  shift: Shift
+): DayGroupConstraint[] {
+  if (!constraint) return []
+  if (Array.isArray(constraint.dayGroups)) {
+    return constraint.dayGroups as DayGroupConstraint[]
+  }
+  // Legacy migration: build from weekdayMin/Max/weekendMin/Max
+  const legacy = constraint as Record<string, unknown>
+  const activeDays = getActiveDaysForShift(shift)
+  const weekdays = activeDays.filter((d) => d !== 0 && d !== 6)
+  const weekends = activeDays.filter((d) => d === 0 || d === 6)
+  const groups: DayGroupConstraint[] = []
+  if (weekdays.length > 0) {
+    const min = (legacy.weekdayMin as number) ?? 0
+    const rawMax = legacy.weekdayMax as number | undefined
+    groups.push({ id: 'legacy-wd', label: 'Weekdays', days: weekdays, min, max: rawMax === 99 || rawMax === undefined ? null : rawMax })
+  }
+  if (weekends.length > 0) {
+    const min = (legacy.weekendMin as number) ?? 0
+    const rawMax = legacy.weekendMax as number | undefined
+    groups.push({ id: 'legacy-we', label: 'Weekends', days: weekends, min, max: rawMax ?? null })
+  }
+  return groups
 }
 
 // Normalize legacy worker preferences (preferWeekendsOff boolean → preferredDaysOff array)
-function normalizeDaysOff(prefs: { preferredDaysOff?: number[]; preferWeekendsOff?: boolean; preferredShiftId?: string | null }): number[] {
+function normalizeDaysOff(prefs: { preferredDaysOff?: number[]; preferWeekendsOff?: boolean }): number[] {
   if (Array.isArray(prefs.preferredDaysOff)) return prefs.preferredDaysOff
-  if ((prefs as { preferWeekendsOff?: boolean }).preferWeekendsOff) return [0, 6]
+  if (prefs.preferWeekendsOff) return [0, 6]
   return []
 }
 
@@ -51,17 +87,16 @@ export function generateMonthSchedule(
     }
   }
 
-  // Step 1: For each day, determine which shift each group works
-  const dayGroupShift = new Map<string, { A: ShiftId; B: ShiftId }>()
+  // Step 1: For each day, determine which shift each rotation slot works.
+  // Workers at even indices (0, 2, 4…) are slot 0; odd indices (1, 3, 5…) are slot 1.
+  // Slots swap shifts each ISO week.
+  const dayRotationShift = new Map<string, [ShiftId, ShiftId]>()
   for (const day of days) {
-    const dateStr = toDateString(day)
-    const isoWeek = getISOWeekNumber(day)
-    const isOddWeek = isoWeek % 2 === 1
-
-    const shiftA = isOddWeek ? config.groupAShiftWeek1 : config.groupBShiftWeek1
-    const shiftB = isOddWeek ? config.groupBShiftWeek1 : config.groupAShiftWeek1
-
-    dayGroupShift.set(dateStr, { A: shiftA, B: shiftB })
+    const isOddWeek = getISOWeekNumber(day) % 2 === 1
+    dayRotationShift.set(toDateString(day), [
+      isOddWeek ? config.groupAShiftWeek1 : config.groupBShiftWeek1,
+      isOddWeek ? config.groupBShiftWeek1 : config.groupAShiftWeek1,
+    ])
   }
 
   // Step 2: Assign days off per worker per ISO week
@@ -73,7 +108,6 @@ export function generateMonthSchedule(
   const weekGroups = groupByISOWeek(days)
 
   for (const [isoWeek, weekDays] of weekGroups) {
-    // Sort: Mon-Fri first, then Sat, Sun
     const sorted = [...weekDays].sort((a, b) => {
       const aDow = a.getDay() === 0 ? 7 : a.getDay()
       const bDow = b.getDay() === 0 ? 7 : b.getDay()
@@ -83,12 +117,11 @@ export function generateMonthSchedule(
     const maxDaysOffThisWeek = Math.max(0, Math.min(config.daysOffPerWeek, sorted.length - 1))
 
     activeWorkers.forEach((worker, workerIndex) => {
-      const preferredDaysOff = normalizeDaysOff(worker.preferences as { preferredDaysOff?: number[]; preferWeekendsOff?: boolean; preferredShiftId?: string | null })
+      const preferredDaysOff = normalizeDaysOff(worker.preferences as { preferredDaysOff?: number[]; preferWeekendsOff?: boolean })
 
       const offset = (isoWeek + workerIndex * 3) % sorted.length
       const rotated = [...sorted.slice(offset), ...sorted.slice(0, offset)]
 
-      // Move preferred days to front of candidate list
       let candidates: Date[]
       if (preferredDaysOff.length > 0) {
         const preferred = rotated.filter((d) => preferredDaysOff.includes(d.getDay()))
@@ -109,8 +142,9 @@ export function generateMonthSchedule(
   // Step 3: Build entries
   const entries: ScheduleEntry[] = []
 
-  for (const worker of activeWorkers) {
+  activeWorkers.forEach((worker, workerIndex) => {
     const daysOffSet = workerDaysOff.get(worker.id)!
+    const slot = workerIndex % 2
 
     for (const day of days) {
       const dateStr = toDateString(day)
@@ -126,11 +160,9 @@ export function generateMonthSchedule(
         continue
       }
 
-      const groupShifts = dayGroupShift.get(dateStr)!
-      const shiftId = groupShifts[worker.shiftGroup]
+      const shiftId = dayRotationShift.get(dateStr)![slot as 0 | 1]
       const shift = config.shifts.find((s) => s.id === shiftId)
 
-      // If the assigned shift doesn't run on this day, worker is off
       if (shift && !isShiftActiveOnDay(shift, day)) {
         entries.push({ workerId: worker.id, date: dateStr, shiftId: null, status: 'off', note: '' })
         continue
@@ -138,80 +170,53 @@ export function generateMonthSchedule(
 
       entries.push({ workerId: worker.id, date: dateStr, shiftId, status: 'auto', note: '' })
     }
-  }
+  })
 
-  // Step 4: Enforce weekend max constraint (hard) — only for shifts active on that day
-  const weekendDays = days.filter((d) => isWeekendDay(d))
-  for (const day of weekendDays) {
+  // Step 4: Enforce day-group max constraints (hard) — removes excess workers
+  for (const day of days) {
     const dateStr = toDateString(day)
     for (const shift of config.shifts) {
       if (!isShiftActiveOnDay(shift, day)) continue
 
       const constraint = config.constraints.find((c) => c.shiftId === shift.id)
-      if (!constraint) continue
+      const groups = normalizeDayGroups(constraint as (ShiftConstraints & Record<string, unknown>) | undefined, shift)
+      const group = groups.find((g) => g.days.includes(day.getDay() as DayOfWeek))
+      if (!group || group.max === null) continue
 
-      const working = entries.filter(
-        (e) => e.date === dateStr && e.shiftId === shift.id && e.status !== 'off'
-      )
+      const working = entries.filter((e) => e.date === dateStr && e.shiftId === shift.id && e.status !== 'off')
+      if (working.length <= group.max) continue
 
-      if (working.length > constraint.weekendMax) {
-        const excess = working.length - constraint.weekendMax
-        const preferSorted = [...working].sort((a, b) => {
-          const wa = activeWorkers.find((w) => w.id === a.workerId)
-          const wb = activeWorkers.find((w) => w.id === b.workerId)
-          const aDaysOff = normalizeDaysOff(wa?.preferences as { preferredDaysOff?: number[]; preferWeekendsOff?: boolean } ?? {})
-          const bDaysOff = normalizeDaysOff(wb?.preferences as { preferredDaysOff?: number[]; preferWeekendsOff?: boolean } ?? {})
-          const aScore = aDaysOff.includes(day.getDay()) ? 1 : 0
-          const bScore = bDaysOff.includes(day.getDay()) ? 1 : 0
-          return bScore - aScore
-        })
-        const toRemove = preferSorted.slice(0, excess)
-        for (const entry of toRemove) {
-          const idx = entries.findIndex((e) => e.workerId === entry.workerId && e.date === entry.date)
-          if (idx >= 0) {
-            entries[idx] = { ...entries[idx], shiftId: null, status: 'off' }
-          }
-        }
+      const excess = working.length - group.max
+      const preferSorted = [...working].sort((a, b) => {
+        const wa = activeWorkers.find((w) => w.id === a.workerId)
+        const wb = activeWorkers.find((w) => w.id === b.workerId)
+        const aDaysOff = normalizeDaysOff((wa?.preferences ?? {}) as { preferredDaysOff?: number[] })
+        const bDaysOff = normalizeDaysOff((wb?.preferences ?? {}) as { preferredDaysOff?: number[] })
+        return (bDaysOff.includes(day.getDay()) ? 1 : 0) - (aDaysOff.includes(day.getDay()) ? 1 : 0)
+      })
+      for (const entry of preferSorted.slice(0, excess)) {
+        const idx = entries.findIndex((e) => e.workerId === entry.workerId && e.date === entry.date)
+        if (idx >= 0) entries[idx] = { ...entries[idx], shiftId: null, status: 'off' }
       }
     }
   }
 
-  // Step 5: Check min constraints (soft — produces violations) — skip inactive shifts
+  // Step 5: Check day-group min constraints (soft — produces violations)
   const violations: ConstraintViolation[] = []
 
-  const weekdayDays = days.filter((d) => isWeekdayDay(d))
-  for (const day of weekdayDays) {
+  for (const day of days) {
     const dateStr = toDateString(day)
     for (const shift of config.shifts) {
       if (!isShiftActiveOnDay(shift, day)) continue
 
       const constraint = config.constraints.find((c) => c.shiftId === shift.id)
-      if (!constraint) continue
+      const groups = normalizeDayGroups(constraint as (ShiftConstraints & Record<string, unknown>) | undefined, shift)
+      const group = groups.find((g) => g.days.includes(day.getDay() as DayOfWeek))
+      if (!group || group.min === 0) continue
 
-      const count = entries.filter(
-        (e) => e.date === dateStr && e.shiftId === shift.id && e.status !== 'off'
-      ).length
-
-      if (count < constraint.weekdayMin) {
-        violations.push({ date: dateStr, shiftId: shift.id, type: 'below_min', actual: count, limit: constraint.weekdayMin })
-      }
-    }
-  }
-
-  for (const day of weekendDays) {
-    const dateStr = toDateString(day)
-    for (const shift of config.shifts) {
-      if (!isShiftActiveOnDay(shift, day)) continue
-
-      const constraint = config.constraints.find((c) => c.shiftId === shift.id)
-      if (!constraint) continue
-
-      const count = entries.filter(
-        (e) => e.date === dateStr && e.shiftId === shift.id && e.status !== 'off'
-      ).length
-
-      if (constraint.weekendMin > 0 && count < constraint.weekendMin) {
-        violations.push({ date: dateStr, shiftId: shift.id, type: 'below_min', actual: count, limit: constraint.weekendMin })
+      const count = entries.filter((e) => e.date === dateStr && e.shiftId === shift.id && e.status !== 'off').length
+      if (count < group.min) {
+        violations.push({ date: dateStr, shiftId: shift.id, type: 'below_min', actual: count, limit: group.min })
       }
     }
   }

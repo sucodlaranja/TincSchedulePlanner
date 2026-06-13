@@ -2,7 +2,7 @@
 
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
-import { generateMonthSchedule } from './scheduler'
+import { generateMonthSchedule, normalizeDayGroups } from './scheduler'
 import type {
   ScheduleConfig,
   Worker,
@@ -13,6 +13,7 @@ import type {
   ScheduleEntry,
   MonthSchedule,
   ConstraintViolation,
+  DayGroupConstraint,
 } from './types'
 
 interface ScheduleStore {
@@ -135,25 +136,23 @@ export const useScheduleStore = create<ScheduleStore>()(
         const { config, schedules } = get()
         if (!config) return
 
-        // Pre-flight: check if groups have enough workers to meet weekday minimums
+        // Pre-flight: check if rotation slots have enough workers to meet day-group minimums
         const configWarnings: string[] = []
-        const groupAWorkers = config.workers.filter((w) => w.active && w.shiftGroup === 'A')
-        const groupBWorkers = config.workers.filter((w) => w.active && w.shiftGroup === 'B')
+        const activeWorkers = config.workers.filter((w) => w.active)
+        // Workers auto-split by index parity: even indices → slot 0, odd → slot 1
+        const slot0Count = Math.ceil(activeWorkers.length / 2)
+        const slot1Count = Math.floor(activeWorkers.length / 2)
 
         for (const shift of config.shifts) {
           const constraint = config.constraints.find((c) => c.shiftId === shift.id)
-          if (!constraint || constraint.weekdayMin === 0) continue
+          const groups = normalizeDayGroups(constraint as (ShiftConstraints & Record<string, unknown>) | undefined, shift)
+          const maxMin = groups.length > 0 ? Math.max(...groups.map((g: DayGroupConstraint) => g.min)) : 0
+          if (maxMin === 0) continue
 
-          // Determine which group covers this shift in odd weeks
-          const groupForShift =
-            config.groupAShiftWeek1 === shift.id ? groupAWorkers
-            : config.groupBShiftWeek1 === shift.id ? groupBWorkers
-            : null
-
-          if (groupForShift && groupForShift.length < constraint.weekdayMin) {
-            const groupLabel = config.groupAShiftWeek1 === shift.id ? 'A' : 'B'
+          const slotCount = config.groupAShiftWeek1 === shift.id ? slot0Count : slot1Count
+          if (slotCount < maxMin) {
             configWarnings.push(
-              `${shift.name} needs at least ${constraint.weekdayMin} workers per weekday, but Group ${groupLabel} only has ${groupForShift.length} active worker${groupForShift.length !== 1 ? 's' : ''}.`
+              `${shift.name} needs at least ${maxMin} workers, but only ~${slotCount} are in rotation for it.`
             )
           }
         }
