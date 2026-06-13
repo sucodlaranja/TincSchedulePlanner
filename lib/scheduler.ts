@@ -172,6 +172,105 @@ export function generateMonthSchedule(
     }
   })
 
+  // Step 3.5: Minimum staffing enforcement — restore workers from 'off' to cover shortfalls
+  // Runs before max enforcement so Step 4 can trim any resulting overstaffing correctly.
+  for (const day of days) {
+    const dateStr = toDateString(day)
+    const dow = day.getDay() as DayOfWeek
+    const isoWeek = getISOWeekNumber(day)
+
+    for (const shift of config.shifts) {
+      if (!isShiftActiveOnDay(shift, day)) continue
+
+      const constraint = config.constraints.find((c) => c.shiftId === shift.id)
+      const groups = normalizeDayGroups(constraint as (ShiftConstraints & Record<string, unknown>) | undefined, shift)
+      const group = groups.find((g) => g.days.includes(dow))
+      if (!group || group.min === 0) continue
+
+      const working = entries.filter((e) => e.date === dateStr && e.shiftId === shift.id && e.status !== 'off')
+      if (working.length >= group.min) continue
+
+      const shortage = group.min - working.length
+
+      // Candidates: workers assigned 'off' this day whose rotation slot maps to this shift
+      const candidates = entries
+        .filter((e) => {
+          if (e.date !== dateStr) return false
+          if (e.status === 'manual') return false
+          if (e.shiftId !== null || e.status !== 'off') return false
+          const workerIdx = activeWorkers.findIndex((w) => w.id === e.workerId)
+          if (workerIdx < 0) return false
+          const slot = workerIdx % 2
+          return dayRotationShift.get(dateStr)?.[slot as 0 | 1] === shift.id
+        })
+        .sort((a, b) => {
+          // Pull back workers who don't prefer today off first; preference-holders are last resort
+          const wa = activeWorkers.find((w) => w.id === a.workerId)!
+          const wb = activeWorkers.find((w) => w.id === b.workerId)!
+          const aP = normalizeDaysOff(wa.preferences as { preferredDaysOff?: number[]; preferWeekendsOff?: boolean }).includes(dow) ? 1 : 0
+          const bP = normalizeDaysOff(wb.preferences as { preferredDaysOff?: number[]; preferWeekendsOff?: boolean }).includes(dow) ? 1 : 0
+          return aP - bP
+        })
+
+      for (const candidate of candidates.slice(0, shortage)) {
+        // Restore worker to working on this day
+        const idx = entries.findIndex((e) => e.workerId === candidate.workerId && e.date === dateStr)
+        if (idx < 0) continue
+        entries[idx] = { ...entries[idx], shiftId: shift.id, status: 'auto' }
+
+        // Try to find a swap day off in the same ISO week to preserve their days-off count
+        const workerIdx = activeWorkers.findIndex((w) => w.id === candidate.workerId)
+        const slot = workerIdx % 2
+        const preferredDaysOff = normalizeDaysOff(
+          activeWorkers[workerIdx].preferences as { preferredDaysOff?: number[]; preferWeekendsOff?: boolean }
+        )
+
+        const swapCandidates = days
+          .filter((d) => {
+            if (toDateString(d) === dateStr) return false
+            if (getISOWeekNumber(d) !== isoWeek) return false
+            const dStr = toDateString(d)
+            const e = entries.find((x) => x.workerId === candidate.workerId && x.date === dStr)
+            return e?.status === 'auto'
+          })
+          .sort((a, b) => {
+            // Prefer swapping to a day the worker actually wants off
+            const aP = preferredDaysOff.includes(a.getDay() as DayOfWeek) ? -1 : 0
+            const bP = preferredDaysOff.includes(b.getDay() as DayOfWeek) ? -1 : 0
+            return aP - bP
+          })
+
+        for (const swapDay of swapCandidates) {
+          const swapDateStr = toDateString(swapDay)
+          const swapDow = swapDay.getDay() as DayOfWeek
+          const swapShiftId = dayRotationShift.get(swapDateStr)?.[slot as 0 | 1]
+          if (!swapShiftId) continue
+
+          const swapShift = config.shifts.find((s) => s.id === swapShiftId)
+          if (!swapShift || !isShiftActiveOnDay(swapShift, swapDay)) continue
+
+          const swapConstraint = config.constraints.find((c) => c.shiftId === swapShiftId)
+          const swapGroups = normalizeDayGroups(
+            swapConstraint as (ShiftConstraints & Record<string, unknown>) | undefined,
+            swapShift
+          )
+          const swapGroup = swapGroups.find((g) => g.days.includes(swapDow))
+          const swapMin = swapGroup?.min ?? 0
+
+          const swapCount = entries.filter(
+            (e) => e.date === swapDateStr && e.shiftId === swapShiftId && e.status !== 'off'
+          ).length
+
+          if (swapCount - 1 >= swapMin) {
+            const swapIdx = entries.findIndex((e) => e.workerId === candidate.workerId && e.date === swapDateStr)
+            if (swapIdx >= 0) entries[swapIdx] = { ...entries[swapIdx], shiftId: null, status: 'off' }
+            break
+          }
+        }
+      }
+    }
+  }
+
   // Step 4: Enforce day-group max constraints (hard) — removes excess workers
   for (const day of days) {
     const dateStr = toDateString(day)
