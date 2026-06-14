@@ -141,6 +141,7 @@ function ShiftConstraintBlock({
               ))}
             </div>
             <button
+              title="Remove constraint group"
               onClick={() => removeGroup(group.id)}
               className="shrink-0 text-gray-400 hover:text-red-500 transition cursor-pointer p-0.5"
             >

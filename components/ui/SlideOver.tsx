@@ -15,7 +15,7 @@ export default function SlideOver({
   onClose,
   title,
   children,
-  width = 'w-[480px]',
+  width = 'w-full sm:w-[480px]',
 }: SlideOverProps) {
   useEffect(() => {
     if (isOpen) {

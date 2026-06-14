@@ -42,7 +42,7 @@ export default function CalendarCell({
   if (!config) {
     return (
       <div
-        className={`min-h-[80px] border border-gray-100 p-1.5 ${isWeekend ? "bg-gray-50" : "bg-white"} ${!inMonth ? "opacity-30" : ""}`}
+        className={`min-h-13 sm:min-h-20 border border-gray-100 p-1 sm:p-1.5 ${isWeekend ? "bg-gray-50" : "bg-white"} ${!inMonth ? "opacity-30" : ""}`}
       >
         <span className="text-xs text-gray-400">{date.getDate()}</span>
       </div>
@@ -61,7 +61,7 @@ export default function CalendarCell({
   return (
     <div
       onClick={() => inMonth && hasScheduleData && onClick(dateStr)}
-      className={`relative min-h-[80px] border border-gray-100 border-l-4 ${borderColor} p-1.5 transition-colors
+      className={`relative min-h-13 sm:min-h-20 border border-gray-100 border-l-4 ${borderColor} p-1 sm:p-1.5 transition-colors
         ${isWeekend ? "bg-gray-50" : "bg-white"}
         ${!inMonth ? "opacity-30" : ""}
         ${inMonth && hasScheduleData ? "cursor-pointer hover:bg-blue-50/40" : ""}
