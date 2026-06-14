@@ -69,15 +69,19 @@ export default function WorkerDetailView({ workerId }: WorkerDetailViewProps) {
       </div>
 
       <div className="flex items-center gap-3">
-        <button onClick={handlePrev} className="p-1.5 rounded hover:bg-gray-100 text-gray-500 transition cursor-pointer">
+        <button
+          title="Previous month"
+          onClick={handlePrev} className="p-1.5 rounded hover:bg-gray-100 text-gray-500 transition cursor-pointer">
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
         </button>
-        <span className="text-base font-semibold text-gray-800 min-w-[160px] text-center">
+        <span className="text-base font-semibold text-gray-800 min-w-40 text-center">
           {formatMonthLabel(activeYear, activeMonth)}
         </span>
-        <button onClick={handleNext} className="p-1.5 rounded hover:bg-gray-100 text-gray-500 transition cursor-pointer">
+        <button
+        title="Next month"
+        onClick={handleNext} className="p-1.5 rounded hover:bg-gray-100 text-gray-500 transition cursor-pointer">
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
           </svg>
