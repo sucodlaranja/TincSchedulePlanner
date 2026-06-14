@@ -186,6 +186,11 @@ function ShiftConstraintBlock({
                 })
               }
             />
+            {group.max !== null && group.max < group.min && (
+              <p className="col-span-2 text-xs text-red-500">
+                Max must be ≥ min ({group.min})
+              </p>
+            )}
           </div>
         </div>
       ))}
